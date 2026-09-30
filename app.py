@@ -40,11 +40,14 @@ def scan():
             result = "✅ HTTPS is enabled"
         else:
             result = "⚠️ HTTPS is not being used"
+            
+        ssl_result = check_ssl(website)
 
         return f"""
         Website: {website}<br>
         Status Code: {response.status_code}<br>
-        {result}
+        {result}<br>
+        {ssl_result}
         """
 
     except requests.exceptions.RequestException:

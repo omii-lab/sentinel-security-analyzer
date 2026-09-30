@@ -4,25 +4,26 @@ import ssl
 import socket
 
 app = Flask(__name__)
+
+
 def check_ssl(website):
     try:
         hostname = website.replace("https://", "").replace("http://", "").split("/")[0]
 
         context = ssl.create_default_context()
 
-        with context.wrap_socket(
-            socket.socket(),
-            server_hostname=hostname
-        ) as sock:
-            sock.settimeout(5)
-            sock.connect((hostname, 443))
+        with socket.create_connection((hostname, 443), timeout=5) as sock:
+            with context.wrap_socket(sock, server_hostname=hostname) as secure_sock:
+                certificate = secure_sock.getpeercert()
 
-            certificate = sock.getpeercert()
+        if certificate:
+            return "✅ SSL certificate is valid"
+        else:
+            return "⚠️ SSL certificate information not available"
 
-        return "✅ SSL certificate is valid"
+    except Exception as e:
+        return f"❌ SSL check failed: {e}"
 
-    except Exception:
-        return "❌ SSL certificate could not be verified"
 
 @app.route("/")
 def home():
@@ -31,26 +32,47 @@ def home():
 
 @app.route("/scan", methods=["POST"])
 def scan():
-    website = request.form["url"]
+    website = request.form["url"].strip()
+
+    # Add HTTPS automatically if the user doesn't provide a protocol
+    if not website.startswith(("http://", "https://")):
+        website = "https://" + website
 
     try:
-        response = requests.get(website, timeout=5)
+        response = requests.get(
+            website,
+            timeout=5,
+            allow_redirects=True
+        )
 
+        # HTTPS check
         if website.startswith("https://"):
-            result = "✅ HTTPS is enabled"
+            https_result = "✅ HTTPS is enabled"
         else:
-            result = "⚠️ HTTPS is not being used"
-            
+            https_result = "⚠️ HTTPS is not being used"
+
+        # SSL check
         ssl_result = check_ssl(website)
 
         return f"""
-        Website: {website}<br>
-        Status Code: {response.status_code}<br>
-        {result}<br>
-        {ssl_result}
+        <h2>🛡️ Sentinel Security Analyzer</h2>
+
+        <p><b>Website:</b> {website}</p>
+
+        <p><b>Status Code:</b> {response.status_code}</p>
+
+        <p>{https_result}</p>
+
+        <p>{ssl_result}</p>
         """
 
-    except requests.exceptions.RequestException:
-        return "❌ Could not connect to this website"
-        
-app.run(debug=True)
+    except requests.exceptions.RequestException as e:
+        return f"""
+        <h2>🛡️ Sentinel Security Analyzer</h2>
+        <p>❌ Could not connect to this website.</p>
+        <p>Error: {e}</p>
+        """
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
